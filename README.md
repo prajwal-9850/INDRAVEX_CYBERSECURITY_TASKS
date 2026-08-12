@@ -12,7 +12,7 @@ Everything here was tested against local, self-hosted, or intentionally vulnerab
 
 | # | Task | Status | Report | Video |
 |---|------|--------|--------|-------|
-| 1 | Vulnerability Assessment of a Website | ✅ Done | [Task1/](./Task1) | [LinkedIn]() |
+| 1 | Vulnerability Assessment of a Website | ✅ Done | [Task1/](https://github.com/prajwal-9850/INDRAVEX_CYBERSECURITY_TASKS/blob/main/Task1_Vulnerability_Assessment/Task%201%20report.pdf) | [LinkedIn](https://www.linkedin.com/in/prajwal-wanave-07a434370/recent-activity/all/) |
 | 2 | Linux Server Hardening | ⏳ In progress | — | — |
 | 3 | Network Reconnaissance | ⏳ Not started | — | — |
 | 4 | Web Security Testing | ⏳ Not started | — | — |
