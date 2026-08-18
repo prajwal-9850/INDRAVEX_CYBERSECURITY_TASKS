@@ -41,7 +41,7 @@ Screenshots and the detailed task report are included in this repository.
 
 ##  Demo
 
-**LinkedIn:** [Add LinkedIn Post Link]
+**LinkedIn:** [https://www.linkedin.com/posts/prajwal-wanave-07a434370_indravextechnologies-cybersecurity-internship-ugcPost-7495532652972654592-Y2GE/?utm_source=share&utm_medium=member_desktop&rcm=ACoAAFvmfl4Bs7H0HSN5E99tZrZ4SntHc4JBFTo]
 
 ##  Internship
 
