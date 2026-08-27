@@ -18,7 +18,7 @@ Everything here was tested against local, self-hosted, or intentionally vulnerab
 | 4 | Web Security Testing | ⏳ Not started | — | — |
 | 5 | Security Incident Report | ⏳ Not started | — | — |
 
-*(Update the checkmarks and links as each task wraps up.)*
+
 
 ## Repo Structure
 
