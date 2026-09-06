@@ -23,6 +23,6 @@ Prepare a professional incident response report covering what happened, what the
 ## Note
 This is a hypothetical scenario given as part of the internship task — no real company, employee, or incident is involved.
 
----
+
 
 This was the final task (5 of 5) for the Indravex Technologies Cyber Security Internship.
