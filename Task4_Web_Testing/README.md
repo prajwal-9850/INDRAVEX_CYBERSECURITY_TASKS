@@ -98,7 +98,3 @@ The testing showed how improper handling of user input can lead to login bypass,
 ## Note
 
 This testing was performed only on the local OWASP Juice Shop instance running in Docker for the internship task.
-
-## Video
-
-[LinkedIn demo video](https://www.linkedin.com/)
